@@ -1,0 +1,32 @@
+# https://pre-commit.com/
+
+repos:
+  - repo: local
+    hooks:
+      - id: fix
+        name: fix
+        language: system
+        files: '[.]rs$'
+        entry: cargo fix --allow-staged
+        pass_filenames: false
+
+      - id: fmt
+        name: fmt
+        language: system
+        files: '[.]rs$'
+        entry: rustup run --install nightly-2020-06-04 rustfmt
+        pass_filenames: true
+
+      - id: check
+        name: check
+        language: system
+        files: '[.]rs$'
+        entry: cargo clippy --all-targets --features strict
+        pass_filenames: false
+
+      - id: test
+        name: test
+        language: system
+        files: '[.]rs$'
+        entry: cargo test
+        pass_filenames: false
