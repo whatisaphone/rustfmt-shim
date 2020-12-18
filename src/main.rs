@@ -7,7 +7,6 @@
 use std::{
     borrow::Cow,
     env,
-    error::Error,
     fs,
     fs::File,
     io::{stdin, stdout, BufWriter, Read, Write},
@@ -77,15 +76,15 @@ fn install() {
 // write all errors to the logfile.
 fn run() -> Result<(), ()> {
     let mut source = String::with_capacity(1024);
-    let len = stdin().read_to_string(&mut source).map_err(|err| {
-        error!(err = ?err, "could not read from stdin");
-    })?;
+    let len = stdin()
+        .read_to_string(&mut source)
+        .map_err(|err| error!(err = ?err, "could not read from stdin"))?;
     info!(len = len, "read source from stdin");
 
     let toolchain = match choose_toolchain() {
         Ok(toolchain) => Cow::from(toolchain),
-        Err(err) => {
-            warn!(err = ?err, "error determining toolchain; falling back to stable");
+        Err(()) => {
+            warn!("error determining toolchain; falling back to stable");
             "stable".into()
         }
     };
@@ -100,27 +99,20 @@ fn run() -> Result<(), ()> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|err| {
-            error!(err = ?err, "error running `rustup run rustfmt`");
-        })?;
+        .map_err(|err| error!(err = ?err, "error running `rustup run rustfmt`"))?;
     rustfmt
         .stdin
         .as_ref()
         .unwrap()
         .write_all(source.as_bytes())
-        .map_err(|err| {
-            error!(err = ?err, "could not write data to rustfmt");
-        })?;
-    let output = rustfmt.wait_with_output().map_err(|err| {
-        error!(err = ?err, "could not read output from rustfmt");
-    })?;
-    let code = match output.status.code() {
-        Some(code) => code,
-        None => {
-            error!("could not get rustfmt exit code");
-            return Err(());
-        }
-    };
+        .map_err(|err| error!(err = ?err, "could not write data to rustfmt"))?;
+    let output = rustfmt
+        .wait_with_output()
+        .map_err(|err| error!(err = ?err, "could not read output from rustfmt"))?;
+    let code = output
+        .status
+        .code()
+        .ok_or_else(|| error!("could not get rustfmt exit code"))?;
     info!(exit_code = code, "rustfmt finished");
     if code != 0 {
         warn!(stderr = &*String::from_utf8_lossy(&output.stderr));
@@ -132,8 +124,9 @@ fn run() -> Result<(), ()> {
     Ok(())
 }
 
-fn choose_toolchain() -> Result<String, Box<dyn Error>> {
-    let data = fs::read_to_string(".pre-commit-config.yaml")?;
+fn choose_toolchain() -> Result<String, ()> {
+    let data = fs::read_to_string(".pre-commit-config.yaml")
+        .map_err(|err| warn!(err = ?err, "could not read pre-commit config"))?;
     info!("read pre-commit config");
     let toolchain = match regex!(r"rustup run(?: --install)? (\S+)").captures(&data) {
         Some(m) => m[1].to_string(),
