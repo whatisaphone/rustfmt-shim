@@ -10,12 +10,12 @@ use std::{
     error::Error,
     fs,
     fs::File,
-    io::BufWriter,
+    io::{stdin, stdout, BufWriter, Read, Write},
     path::PathBuf,
     process,
-    process::Command,
+    process::{Command, Stdio},
 };
-use tracing::{info, level_filters::LevelFilter, warn};
+use tracing::{error, info, level_filters::LevelFilter, warn};
 use tracing_subscriber::EnvFilter;
 
 #[macro_use]
@@ -41,7 +41,10 @@ fn main2() -> i32 {
         install();
         0
     } else {
-        run()
+        match run() {
+            Ok(()) => 0,
+            Err(()) => 1,
+        }
     }
 }
 
@@ -72,7 +75,13 @@ fn install() {
 
 // It's not ok to panic; intellij will not show stderr to the user. Make sure to
 // write all errors to the logfile.
-fn run() -> i32 {
+fn run() -> Result<(), ()> {
+    let mut source = String::with_capacity(1024);
+    let len = stdin().read_to_string(&mut source).map_err(|err| {
+        error!(err = ?err, "could not read from stdin");
+    })?;
+    info!(len = len, "read source from stdin");
+
     let toolchain = match choose_toolchain() {
         Ok(toolchain) => Cow::from(toolchain),
         Err(err) => {
@@ -81,26 +90,46 @@ fn run() -> i32 {
         }
     };
     info!(toolchain = &*toolchain, "chose toolchain");
-    let status = Command::new("rustup")
+
+    let rustfmt = Command::new("rustup")
         .arg("run")
         .arg(&*toolchain)
         .arg("rustfmt")
         .args(env::args().skip(1))
-        .status();
-    let status = match status {
-        Ok(status) => status,
-        Err(err) => {
-            warn!(err = ?err, "error running `rustup run rustfmt`");
-            return 1;
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| {
+            error!(err = ?err, "error running `rustup run rustfmt`");
+        })?;
+    rustfmt
+        .stdin
+        .as_ref()
+        .unwrap()
+        .write_all(source.as_bytes())
+        .map_err(|err| {
+            error!(err = ?err, "could not write data to rustfmt");
+        })?;
+    let output = rustfmt.wait_with_output().map_err(|err| {
+        error!(err = ?err, "could not read output from rustfmt");
+    })?;
+    let code = match output.status.code() {
+        Some(code) => code,
+        None => {
+            error!("could not get rustfmt exit code");
+            return Err(());
         }
     };
-    if let Some(code) = status.code() {
-        info!(exit_code = code, "rustfmt returned");
-        code
-    } else {
-        warn!("could not get rustfmt exit code");
-        1
+    info!(exit_code = code, "rustfmt finished");
+    if code != 0 {
+        warn!(stderr = &*String::from_utf8_lossy(&output.stderr));
+        return Err(());
     }
+    stdout()
+        .write_all(&output.stdout)
+        .map_err(|err| error!(err = ?err, "could not write to stdout"))?;
+    Ok(())
 }
 
 fn choose_toolchain() -> Result<String, Box<dyn Error>> {
