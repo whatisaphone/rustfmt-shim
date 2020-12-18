@@ -81,6 +81,22 @@ fn run() -> Result<(), ()> {
         .map_err(|err| error!(err = ?err, "could not read from stdin"))?;
     info!(len = len, "read source from stdin");
 
+    let stdlib_reexports = &[
+        regex!(r"(?m)^use bumpalo::core_alloc::"),
+        regex!(r"(?m)^use failure::_core::"),
+        regex!(r"(?m)^use futures_core::core_reexport::"),
+        regex!(r"(?m)^use smallvec::alloc::"),
+        regex!(r"(?m)^use tracing::stdlib::"),
+        regex!(r"(?m)^use winapi::_core::"),
+    ];
+    for regex in stdlib_reexports {
+        source = match regex.replace_all(&source, "use std::") {
+            // `Borrowed` means nothing changed
+            Cow::Borrowed(_) => source,
+            Cow::Owned(s) => s,
+        }
+    }
+
     let toolchain = match choose_toolchain() {
         Ok(toolchain) => Cow::from(toolchain),
         Err(()) => {

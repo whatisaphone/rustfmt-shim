@@ -1,15 +1,21 @@
 # rustfmt-shim
 
-A workaround for this intellij-rust bug:
+A temporary workaround for a few intellij-rust issues:
 
->[Support use of rustfmt-nightly](https://github.com/intellij-rust/intellij-rust/issues/1343)
+- rustfmt toolchain
+  - [#6061 Feature request: Run nightly rustfmt on save](https://github.com/intellij-rust/intellij-rust/issues/6061)
+- auto-import woes
+  - [#5654 `extern` exports of std suggested before std](https://github.com/intellij-rust/intellij-rust/issues/5654)
+  - [#5997 Auto import picks private module](https://github.com/intellij-rust/intellij-rust/issues/5997)
+  - [#6399 Rust plugin keeps using "use futures_core::core_reexport::xxx" insted of use "std::"](https://github.com/intellij-rust/intellij-rust/issues/6399)
 
-The workaround is to replace the default `rustfmt` with a shim that:
+The workaround is to replace the default `rustfmt` with a shim, which tricks intellij-rust into running it instead of rustfmt.
 
-- Determines the desired toolchain by parsing `.pre-commit-config.yaml`
-- Runs that toolchain's rustfmt instead
+Here is what the shim does:
 
-Thus, we can trick intellij-rust into running any toolchain's rustfmt.
+- Preprocesses the source to fix imports
+- Runs a different toolchain's rustfmt, if one is found in `.pre-commit-config.yaml`
+  - If no override is found, falls back to stable rustfmt
 
 ## Usage
 
