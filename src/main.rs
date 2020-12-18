@@ -1,6 +1,7 @@
 #![warn(future_incompatible, rust_2018_compatibility, rust_2018_idioms, unused)]
 #![warn(clippy::pedantic)]
 // #![warn(clippy::cargo)]
+#![allow(clippy::single_match_else)]
 #![cfg_attr(feature = "strict", deny(warnings))]
 
 use std::{
@@ -19,8 +20,6 @@ use tracing_subscriber::EnvFilter;
 
 #[macro_use]
 mod macros;
-
-mod pre_commit;
 
 fn main() {
     process::exit(main2());
@@ -105,20 +104,14 @@ fn run() -> i32 {
 }
 
 fn choose_toolchain() -> Result<String, Box<dyn Error>> {
-    let config: pre_commit::Config = serde_yaml::from_reader(File::open(
-        env::current_dir()?.join(".pre-commit-config.yaml"),
-    )?)?;
+    let data = fs::read_to_string(".pre-commit-config.yaml")?;
     info!("read pre-commit config");
-    config
-        .repos
-        .iter()
-        .flat_map(|r| &r.hooks)
-        .find_map(|h| {
-            let match_ = regex!(r"rustup run(?: --install)? (\S+)").captures(&h.entry)?;
-            Some(match_[1].to_string())
-        })
-        .ok_or_else(|| {
-            warn!("no matching hooks; falling back to stable toolchain");
-            "stable".into()
-        })
+    let toolchain = match regex!(r"rustup run(?: --install)? (\S+)").captures(&data) {
+        Some(m) => m[1].to_string(),
+        None => {
+            warn!("no match; falling back to stable toolchain");
+            "stable".to_string()
+        }
+    };
+    Ok(toolchain)
 }
