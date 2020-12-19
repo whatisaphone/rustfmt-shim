@@ -108,6 +108,7 @@ fn run() -> Result<(), ()> {
 
     let rustfmt = Command::new("rustup")
         .arg("run")
+        .arg("--install")
         .arg(&*toolchain)
         .arg("rustfmt")
         .args(env::args().skip(1))
