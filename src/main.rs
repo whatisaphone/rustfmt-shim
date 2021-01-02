@@ -9,7 +9,7 @@ use std::{
     env,
     fs,
     fs::File,
-    io::{stdin, stdout, BufWriter, Read, Write},
+    io::{stderr, stdin, stdout, BufWriter, Read, Write},
     path::PathBuf,
     process,
     process::{Command, Stdio},
@@ -40,10 +40,12 @@ fn main2() -> i32 {
         install();
         0
     } else {
-        match run() {
+        let exit_code = match run() {
             Ok(()) => 0,
             Err(()) => 1,
-        }
+        };
+        info!(exit_code, "exiting gracefully");
+        exit_code
     }
 }
 
@@ -131,13 +133,21 @@ fn run() -> Result<(), ()> {
         .code()
         .ok_or_else(|| error!("could not get rustfmt exit code"))?;
     info!(exit_code = code, "rustfmt finished");
+
+    info!(len = output.stdout.len(), "copying stdout");
+    stdout()
+        .write_all(&output.stdout)
+        .map_err(|err| error!(err = ?err, "could not write to stdout"))?;
+
+    info!(len = output.stderr.len(), "copying stderr");
+    stderr()
+        .write_all(&output.stderr)
+        .map_err(|err| error!(err = ?err, "could not write to stderr"))?;
+
     if code != 0 {
         warn!(stderr = &*String::from_utf8_lossy(&output.stderr));
         return Err(());
     }
-    stdout()
-        .write_all(&output.stdout)
-        .map_err(|err| error!(err = ?err, "could not write to stdout"))?;
     Ok(())
 }
 
