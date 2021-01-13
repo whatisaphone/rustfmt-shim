@@ -80,8 +80,8 @@ fn run() -> Result<(), ()> {
     let mut source = String::with_capacity(1024);
     let len = stdin()
         .read_to_string(&mut source)
-        .map_err(|err| error!(err = ?err, "could not read from stdin"))?;
-    info!(len = len, "read source from stdin");
+        .map_err(|err| error!(?err, "could not read from stdin"))?;
+    info!(len, "read source from stdin");
 
     let stdlib_reexports = &[
         regex!(r"(?m)^use bumpalo::core_alloc::"),
@@ -100,7 +100,7 @@ fn run() -> Result<(), ()> {
     }
 
     let toolchain = choose_toolchain();
-    info!(toolchain = &*toolchain, "chose toolchain");
+    info!(%toolchain, "chose toolchain");
 
     let rustfmt = Command::new("rustup")
         .arg("run")
@@ -112,34 +112,37 @@ fn run() -> Result<(), ()> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|err| error!(err = ?err, "error running `rustup run rustfmt`"))?;
+        .map_err(|err| error!(?err, "error running `rustup run rustfmt`"))?;
     rustfmt
         .stdin
         .as_ref()
         .unwrap()
         .write_all(source.as_bytes())
-        .map_err(|err| error!(err = ?err, "could not write data to rustfmt"))?;
+        .map_err(|err| error!(?err, "could not write input to rustfmt"))?;
     let output = rustfmt
         .wait_with_output()
-        .map_err(|err| error!(err = ?err, "could not read output from rustfmt"))?;
-    let code = output
+        .map_err(|err| error!(?err, "could not read output from rustfmt"))?;
+    let exit_code = output
         .status
         .code()
         .ok_or_else(|| error!("could not get rustfmt exit code"))?;
-    info!(exit_code = code, "rustfmt finished");
+    info!(exit_code, "rustfmt finished");
 
     info!(len = output.stdout.len(), "copying stdout");
     stdout()
         .write_all(&output.stdout)
-        .map_err(|err| error!(err = ?err, "could not write to stdout"))?;
+        .map_err(|err| error!(?err, "could not write to stdout"))?;
 
     info!(len = output.stderr.len(), "copying stderr");
     stderr()
         .write_all(&output.stderr)
-        .map_err(|err| error!(err = ?err, "could not write to stderr"))?;
+        .map_err(|err| error!(?err, "could not write to stderr"))?;
 
-    if code != 0 {
-        warn!(stderr = &*String::from_utf8_lossy(&output.stderr));
+    if exit_code != 0 {
+        warn!(
+            stderr = %String::from_utf8_lossy(&output.stderr),
+            "rustfmt stderr",
+        );
         return Err(());
     }
     Ok(())
@@ -156,7 +159,7 @@ fn choose_toolchain() -> String {
 
 fn get_toolchain_from_precommit() -> Result<String, ()> {
     let data = fs::read_to_string(".pre-commit-config.yaml")
-        .map_err(|err| warn!(err = ?err, "could not read pre-commit config"))?;
+        .map_err(|err| warn!(?err, "could not read pre-commit config"))?;
     info!("read pre-commit config");
     if let Some(m) = regex!(r"rustup run(?: --install)? (\S+)").captures(&data) {
         return Ok(m[1].to_string());
@@ -170,9 +173,8 @@ fn get_toolchain_from_rustup() -> Result<String, ()> {
         .arg("show")
         .arg("active-toolchain")
         .output()
-        .map_err(|err| warn!(err = ?err, "could not run `rustup show active-toolchain`"))?;
-    let stdout =
-        String::from_utf8(output.stdout).map_err(|err| warn!(err = ?err, "invaild utf-8"))?;
+        .map_err(|err| warn!(?err, "could not run `rustup show active-toolchain`"))?;
+    let stdout = String::from_utf8(output.stdout).map_err(|err| warn!(?err, "invaild utf-8"))?;
     warn!(
         exit_code = ?output.status.code(),
         stdout = %stdout,
