@@ -99,19 +99,13 @@ fn run() -> Result<(), ()> {
         }
     }
 
-    let toolchain = match choose_toolchain() {
-        Ok(toolchain) => Cow::from(toolchain),
-        Err(()) => {
-            warn!("error determining toolchain; falling back to stable");
-            "stable".into()
-        }
-    };
+    let toolchain = choose_toolchain();
     info!(toolchain = &*toolchain, "chose toolchain");
 
     let rustfmt = Command::new("rustup")
         .arg("run")
         .arg("--install")
-        .arg(&*toolchain)
+        .arg(&toolchain)
         .arg("rustfmt")
         .args(env::args().skip(1))
         .stdin(Stdio::piped())
@@ -151,16 +145,46 @@ fn run() -> Result<(), ()> {
     Ok(())
 }
 
-fn choose_toolchain() -> Result<String, ()> {
+fn choose_toolchain() -> String {
+    get_toolchain_from_precommit()
+        .or_else(|()| get_toolchain_from_rustup())
+        .unwrap_or_else(|()| {
+            warn!("no toolchain found; falling back to stable");
+            "stable".to_string()
+        })
+}
+
+fn get_toolchain_from_precommit() -> Result<String, ()> {
     let data = fs::read_to_string(".pre-commit-config.yaml")
         .map_err(|err| warn!(err = ?err, "could not read pre-commit config"))?;
     info!("read pre-commit config");
-    let toolchain = match regex!(r"rustup run(?: --install)? (\S+)").captures(&data) {
-        Some(m) => m[1].to_string(),
-        None => {
-            warn!("no match; falling back to stable toolchain");
-            "stable".to_string()
-        }
-    };
-    Ok(toolchain)
+    if let Some(m) = regex!(r"rustup run(?: --install)? (\S+)").captures(&data) {
+        return Ok(m[1].to_string());
+    }
+    warn!("no match");
+    Err(())
+}
+
+fn get_toolchain_from_rustup() -> Result<String, ()> {
+    let output = Command::new("rustup")
+        .arg("show")
+        .arg("active-toolchain")
+        .output()
+        .map_err(|err| warn!(err = ?err, "could not run `rustup show active-toolchain`"))?;
+    let stdout =
+        String::from_utf8(output.stdout).map_err(|err| warn!(err = ?err, "invaild utf-8"))?;
+    warn!(
+        exit_code = ?output.status.code(),
+        stdout = %stdout,
+        stderr = %String::from_utf8_lossy(&output.stderr),
+        "rustup show active-toolchain",
+    );
+    if !output.status.success() {
+        warn!("nonzero exit code");
+        return Err(());
+    }
+    let toolchain = regex!(r"^(\S+)")
+        .find(&stdout)
+        .ok_or_else(|| warn!("could not parse stdout"))?;
+    Ok(toolchain.as_str().to_string())
 }
