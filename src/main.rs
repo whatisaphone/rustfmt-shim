@@ -89,6 +89,7 @@ fn run() -> Result<(), ()> {
         regex!(r"(?m)^\s*use futures_core::core_reexport::"),
         regex!(r"(?m)^\s*use smallvec::alloc::"),
         regex!(r"(?m)^\s*use tracing::stdlib::"),
+        regex!(r"(?m)^\s*use wasm_bindgen::__rt::core::"),
         regex!(r"(?m)^\s*use winapi::_core::"),
     ];
     for regex in stdlib_reexports {
