@@ -83,6 +83,13 @@ fn run() -> Result<(), ()> {
         .map_err(|err| error!(?err, "could not read from stdin"))?;
     info!(len, "read source from stdin");
 
+    let delete = regex!(r"(?m)^\s*use std::alloc::Global;\n");
+    source = match delete.replace_all(&source, "") {
+        // `Borrowed` means nothing changed
+        Cow::Borrowed(_) => source,
+        Cow::Owned(s) => s,
+    };
+
     let stdlib_reexports = &[
         regex!(r"(?m)^\s*use bumpalo::core_alloc::"),
         regex!(r"(?m)^\s*use failure::_core::"),
