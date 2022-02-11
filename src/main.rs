@@ -77,36 +77,7 @@ fn install() {
 // It's not ok to panic; intellij will not show stderr to the user. Make sure to
 // write all errors to the logfile.
 fn run() -> Result<(), ()> {
-    let mut source = String::with_capacity(1024);
-    let len = stdin()
-        .read_to_string(&mut source)
-        .map_err(|err| error!(?err, "could not read from stdin"))?;
-    info!(len, "read source from stdin");
-
-    let delete = regex!(r"(?m)^\s*use std::alloc::Global;\n");
-    source = match delete.replace_all(&source, "") {
-        // `Borrowed` means nothing changed
-        Cow::Borrowed(_) => source,
-        Cow::Owned(s) => s,
-    };
-
-    let stdlib_reexports = &[
-        regex!(r"(?m)^\s*use bumpalo::core_alloc::"),
-        regex!(r"(?m)^\s*use failure::_core::"),
-        regex!(r"(?m)^\s*use futures_core::core_reexport::"),
-        regex!(r"(?m)^\s*use smallvec::alloc::"),
-        regex!(r"(?m)^\s*use tracing::stdlib::"),
-        regex!(r"(?m)^\s*use wasm_bindgen::__rt::core::"),
-        regex!(r"(?m)^\s*use wasm_bindgen::__rt::std::"),
-        regex!(r"(?m)^\s*use winapi::_core::"),
-    ];
-    for regex in stdlib_reexports {
-        source = match regex.replace_all(&source, "use std::") {
-            // `Borrowed` means nothing changed
-            Cow::Borrowed(_) => source,
-            Cow::Owned(s) => s,
-        }
-    }
+    let source = collect_stdin()?;
 
     let toolchain = choose_toolchain();
     info!(%toolchain, "chose toolchain");
@@ -155,6 +126,45 @@ fn run() -> Result<(), ()> {
         return Err(());
     }
     Ok(())
+}
+
+fn collect_stdin() -> Result<String, ()> {
+    let any_paths = env::args().skip(1).any(|s| !s.starts_with("-"));
+    if any_paths {
+        return Ok(String::new());
+    }
+
+    let mut source = String::with_capacity(1024);
+    let len = stdin()
+        .read_to_string(&mut source)
+        .map_err(|err| error!(?err, "could not read from stdin"))?;
+    info!(len, "read source from stdin");
+
+    let delete = regex!(r"(?m)^\s*use std::alloc::Global;\n");
+    source = match delete.replace_all(&source, "") {
+        // `Borrowed` means nothing changed
+        Cow::Borrowed(_) => source,
+        Cow::Owned(s) => s,
+    };
+
+    let stdlib_reexports = &[
+        regex!(r"(?m)^\s*use bumpalo::core_alloc::"),
+        regex!(r"(?m)^\s*use failure::_core::"),
+        regex!(r"(?m)^\s*use futures_core::core_reexport::"),
+        regex!(r"(?m)^\s*use smallvec::alloc::"),
+        regex!(r"(?m)^\s*use tracing::stdlib::"),
+        regex!(r"(?m)^\s*use wasm_bindgen::__rt::core::"),
+        regex!(r"(?m)^\s*use wasm_bindgen::__rt::std::"),
+        regex!(r"(?m)^\s*use winapi::_core::"),
+    ];
+    for regex in stdlib_reexports {
+        source = match regex.replace_all(&source, "use std::") {
+            // `Borrowed` means nothing changed
+            Cow::Borrowed(_) => source,
+            Cow::Owned(s) => s,
+        }
+    }
+    Ok(source)
 }
 
 fn choose_toolchain() -> String {
