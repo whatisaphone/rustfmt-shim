@@ -7,6 +7,7 @@
 use std::{
     borrow::Cow,
     env,
+    ffi::OsString,
     fs,
     fs::File,
     io::{stderr, stdin, stdout, BufWriter, Read, Write},
@@ -51,14 +52,17 @@ fn main2() -> i32 {
 
 // It's ok to panic; the user will see stderr
 fn install() {
-    let home = dirs::home_dir().expect("could not get home dir");
+    let mut dest_path: OsString = if cfg!(windows) {
+        let home = dirs::home_dir().expect("could not get home dir");
+        home.join(".cargo")
+            .join("bin")
+            .join("rustfmt")
+            .into_os_string()
+    } else {
+        "/usr/bin/rustfmt".into()
+    };
     let current_exe = env::current_exe().expect("could not get current exe");
 
-    let mut dest_path = home
-        .join(".cargo")
-        .join("bin")
-        .join("rustfmt")
-        .into_os_string();
     if let Some(ext) = current_exe.extension() {
         dest_path.push(".");
         dest_path.push(ext);
@@ -70,6 +74,9 @@ fn install() {
     if !backup_path.exists() {
         fs::copy(&dest_path, &backup_path).expect("could not back up existing rustfmt");
     }
+
+    // In case the existing rustfmt is a symlink, don't clobber it
+    fs::remove_file(&dest_path).expect("could not remove existing rustfmt");
 
     fs::copy(&current_exe, &dest_path).expect("could not copy exe");
 }
