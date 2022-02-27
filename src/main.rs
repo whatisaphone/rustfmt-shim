@@ -131,7 +131,7 @@ fn run() -> Result<(), ()> {
 fn collect_stdin() -> Result<String, ()> {
     let any_paths = env::args()
         .skip(1)
-        .any(|s| !s.starts_with("-") || s == "--help");
+        .any(|s| !s.starts_with('-') || s == "--help");
     if any_paths {
         return Ok(String::new());
     }
