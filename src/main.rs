@@ -190,7 +190,8 @@ fn get_toolchain_from_precommit() -> Result<String, ()> {
         .or_else(|_| fs::read_to_string("../.pre-commit-config.yaml"))
         .map_err(|err| warn!(?err, "could not read pre-commit config"))?;
     info!("read pre-commit config");
-    if let Some(m) = regex!(r"rustup run(?: --install)? (\S+) rustfmt").captures(&data) {
+    if let Some(m) = regex!(r"rustup run(?: --install)? (\S+) (?:cargo |rust)fmt\b").captures(&data)
+    {
         return Ok(m[1].to_string());
     }
     warn!("no match");
